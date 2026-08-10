@@ -361,6 +361,19 @@ The Key Vault has purge protection enabled, so `terraform destroy` leaves
 a soft-deleted vault behind. It bills nothing and expires on its own after
 the retention window. `az keyvault list-deleted` shows it.
 
+**One teardown step still needs a hand.** Deleting the Postgres Entra
+administrator can hang for 10 minutes or more. Chaining the Flexible
+Server sub-resources with `depends_on` fixed the worse version of this,
+where three parallel deletes deadlocked indefinitely, and 42 of 45
+resources now tear down cleanly on their own. The administrator delete is
+independently slow. When it stalls, deleting the server directly clears
+it, and the destroy then completes:
+
+```bash
+az postgres flexible-server delete -n <server> -g secops-rg --yes
+terraform -chdir=terraform destroy -auto-approve
+```
+
 ## Repository layout
 
 ```
