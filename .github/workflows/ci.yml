@@ -70,7 +70,7 @@ jobs:
         run: docker build -t secops:ci .
 
       - name: Trivy image scan (CRITICAL and HIGH)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: secops:ci
           severity: CRITICAL,HIGH

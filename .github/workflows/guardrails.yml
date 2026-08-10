@@ -1,9 +1,14 @@
 name: Guardrails
 
+# Manual trigger only until jordann6/platform-guardrails is published.
+# GitHub resolves a reusable workflow reference before it evaluates any
+# `if:` on the job, so an unresolvable `uses:` fails the whole run at
+# startup on every push no matter how the job is gated. Restricting the
+# trigger is the only way to keep the caller in the repo without a
+# permanent red X. Restore the push and pull_request triggers, and drop
+# the `if: false`, once that repo is public.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
