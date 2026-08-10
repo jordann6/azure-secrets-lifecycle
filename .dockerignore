@@ -13,3 +13,14 @@ docker-compose.yml
 Makefile
 README.md
 diagram.py
+
+# The generated schema dump stays out of the image on purpose. Rails
+# loads it in place of running migrations whenever the target database
+# has no migration history, and its auto-generated
+# `enable_extension "pg_catalog.plpgsql"` line fails on Azure Database for
+# PostgreSQL: plpgsql is already installed there but is not allow-listed
+# for non-superusers, so the statement errors out despite being a no-op.
+# Editing the line out does not survive the next local db:migrate, which
+# regenerates it. Without the file the deployed app migrates from the
+# migrations, which are the source of truth anyway.
+db/schema.rb

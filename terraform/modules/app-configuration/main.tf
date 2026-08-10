@@ -20,10 +20,16 @@ resource "azurerm_app_configuration" "main" {
   # demo estate and it costs nothing.
   sku = "free"
 
-  local_auth_enabled         = false
-  public_network_access      = "Enabled"
-  purge_protection_enabled   = false
-  soft_delete_retention_days = 1
+  local_auth_enabled    = false
+  public_network_access = "Enabled"
+
+  # The free SKU does not implement soft delete, and sending any retention
+  # window with it fails the create with SkuFeatureNotSupported. The
+  # provider validates the field to 1 to 7, so there is no value that
+  # works: the attribute has to be absent entirely. The standard SKU
+  # supports it and costs about $36 a month, which is more than the rest
+  # of this deployment combined for a demo store holding five keys.
+  purge_protection_enabled = false
 
   tags = var.tags
 }

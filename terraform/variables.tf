@@ -88,15 +88,25 @@ variable "enable_openai" {
 }
 
 variable "openai_model" {
-  description = "Azure OpenAI model to deploy for runbook synthesis."
+  description = <<-EOT
+    Azure OpenAI model to deploy for runbook synthesis. Must be in a
+    GenerallyAvailable lifecycle state with GlobalStandard quota in the target
+    region: a model listed by `az cognitiveservices model list` can still be
+    rejected at deployment time if it has entered the Deprecating state, and
+    one that is deployable can still have batch-only quota. Check both:
+      az cognitiveservices model list -l <region> \
+        --query "[?model.lifecycleStatus=='GenerallyAvailable'].model.name"
+      az cognitiveservices usage list -l <region> \
+        --query "[?contains(name.value,'GlobalStandard.<model>')]"
+  EOT
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "gpt-5.4-mini"
 }
 
 variable "openai_model_version" {
   description = "Model version for the deployment."
   type        = string
-  default     = "2024-07-18"
+  default     = "2026-03-17"
 }
 
 variable "openai_capacity" {

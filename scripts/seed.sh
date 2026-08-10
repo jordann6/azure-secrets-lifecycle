@@ -17,7 +17,7 @@
 #   scripts/seed.sh create    create the estate
 #   scripts/seed.sh destroy   remove everything this script created
 #
-# Requires KEY_VAULT_NAME and APP_CONFIG_NAME in the environment; run
+# Requires KEY_VAULT_NAME and APP_CONFIG_ENDPOINT in the environment; run
 # `eval "$(make env)"` first.
 
 set -euo pipefail
@@ -26,7 +26,13 @@ PREFIX="secops-test"
 TAG="secops:simulated-age-days"
 
 : "${KEY_VAULT_NAME:?set KEY_VAULT_NAME (run: eval "\$(make env)")}"
-: "${APP_CONFIG_NAME:?set APP_CONFIG_NAME (run: eval "\$(make env)")}"
+: "${APP_CONFIG_ENDPOINT:?set APP_CONFIG_ENDPOINT (run: eval "\$(make env)")}"
+
+# The store has local_auth_enabled = false, so the CLI's default access
+# key path returns "Cannot find a read write access key". Entra auth needs
+# --auth-mode login, and that in turn addresses the store by endpoint
+# rather than by name.
+APPCS=(--endpoint "$APP_CONFIG_ENDPOINT" --auth-mode login)
 
 # name|simulated age days|expiry set
 SECRETS=(
@@ -131,12 +137,12 @@ create_app_config() {
 			# lifecycle is delegated to the referenced secret, which this
 			# same scan already covers. The scanner scores it that way
 			# rather than counting one risk against two resources.
-			az appconfig kv set-keyvault --name "$APP_CONFIG_NAME" \
+			az appconfig kv set-keyvault "${APPCS[@]}" \
 				--key "${PREFIX}/${key}" \
 				--secret-identifier "https://${KEY_VAULT_NAME}.vault.azure.net/secrets/${PREFIX}-legacy-ftp" \
 				--tags "${TAG}=${age}" "seeded-by=secops" --yes --output none
 		else
-			az appconfig kv set --name "$APP_CONFIG_NAME" \
+			az appconfig kv set "${APPCS[@]}" \
 				--key "${PREFIX}/${key}" \
 				--value "$(placeholder "${PREFIX}/${key}")" \
 				--tags "${TAG}=${age}" "seeded-by=secops" --yes --output none
@@ -213,7 +219,7 @@ destroy() {
 	log "removing App Configuration key values"
 	for entry in "${APP_CONFIG_KEYS[@]}"; do
 		IFS='|' read -r key _ _ <<<"$entry"
-		az appconfig kv delete --name "$APP_CONFIG_NAME" \
+		az appconfig kv delete "${APPCS[@]}" \
 			--key "${PREFIX}/${key}" --yes --output none 2>/dev/null || true
 	done
 

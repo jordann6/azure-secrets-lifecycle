@@ -196,7 +196,11 @@ az storage blob delete --account-name <acct> --container-name evidence \
 In Log Analytics, confirm the consumer map source and the findings export:
 
 ```kql
-AZKVAuditLogs | where OperationName == "SecretGet" | summarize count() by identity_claim_oid_g
+AZKVAuditLogs
+| where OperationName == "SecretGet" and ResultSignature == "OK"
+| extend claim = parse_json(tostring(Identity))["claim"]
+| summarize count() by tostring(claim["oid"])
+
 SecOpsFindings_CL | summarize count() by Severity, FindingType
 ```
 
@@ -204,6 +208,53 @@ The dashboard states how many resources in a scan carry a simulated age
 tag. Azure will not let a creation date be backdated any more than AWS
 will, so seeded objects declare their age and every record built from that
 tag is flagged `age_simulated` wherever it appears.
+
+## Field notes from the first real deployment
+
+Everything below was found by deploying this into a live subscription, not
+by reading documentation. They are recorded because each one is the kind
+of thing that passes every local check and then fails on first contact.
+
+- **`az cognitiveservices model list` does not tell you what you can
+  deploy.** It happily returns models in the `Deprecating` lifecycle state
+  that the deployment API rejects outright, and `usage list` can show
+  quota that is batch-only. Check `lifecycleStatus` and GlobalStandard
+  quota together, which is why the `openai_model` variable carries the
+  two-command recipe.
+- **The Key Vault audit schema is not what the column names suggest.** In
+  the resource-specific `AZKVAuditLogs` table the object uri is in
+  `RequestUri` (not `id_s`, which belongs to the legacy `AzureDiagnostics`
+  shape), it carries the data plane port `:8443` that has to be stripped
+  before it matches an inventory record, and caller claims are a JSON blob
+  in `Identity` rather than flattened `identity_claim_*_g` columns.
+- **App Configuration audit rows percent encode hierarchical keys**, so
+  `a/b/c` arrives as `a%2Fb%2Fc` and has to be decoded before it matches.
+  Caller identity is a typed array, not a claims object.
+- **An IP allow list cannot gate a Container Apps consumption workload.**
+  The environment's `staticIp` is not the address the vault sees, and the
+  real egress comes from a shared regional pool that is neither exposed
+  nor stable. Entra RBAC is the control that holds; the firewall is not.
+- **`command` on a Container App replaces the image ENTRYPOINT** rather
+  than appending to it, the same as Kubernetes, so `bundle exec` has to be
+  spelled out in every job.
+- **`db:prepare` and even `db:migrate` load `db/schema.rb`** when the
+  target database has no migration history, and its generated
+  `enable_extension "pg_catalog.plpgsql"` fails on Azure Flexible Server:
+  plpgsql is already installed but is not allow-listed for non-superusers.
+  Keeping the schema dump out of the image is the fix that survives the
+  next local `db:migrate` regenerating it.
+- **Disabling local auth breaks the CLI's default path.** With
+  `shared_access_key_enabled = false` the azurerm provider still reaches
+  for a key to poll the blob data plane unless `storage_use_azuread` is
+  set, and `az appconfig` needs `--auth-mode login` with `--endpoint`
+  instead of `--name`.
+- **The free App Configuration SKU has no soft delete**, and the provider
+  validates the retention field to 1 to 7, so there is no value that
+  works. The attribute has to be absent entirely.
+
+What worked first time: Entra token authentication to Postgres with no
+stored password, the managed identity token chain through the Container
+Apps identity endpoint, Key Vault RBAC, and the Graph app role grants.
 
 ## Metrics instrumented
 
@@ -228,7 +279,7 @@ Per scan, shown on the dashboard and carried in the evidence artifact:
 | Postgres Flexible Server B1ms, 32 GB | ~$15.00 | ~$1.50 |
 | Log Analytics ingestion and retention | < $0.20 (inside the 5 GB free grant) | < $0.02 |
 | Blob evidence storage | < $0.05 | < $0.01 |
-| Azure OpenAI, gpt-4o-mini, 5 runbooks per scan | ~$0.12 | ~$0.01 |
+| Azure OpenAI, gpt-5.4-mini, 5 runbooks per scan | ~$0.12 | ~$0.01 |
 | App Configuration, free tier | $0.00 | $0.00 |
 | Key Vault operations | < $0.05 | < $0.01 |
 | **Total** | **~$20.40** | **~$2.05** |

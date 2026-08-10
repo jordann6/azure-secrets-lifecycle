@@ -194,11 +194,17 @@ resource "azurerm_container_app_job" "migrate" {
 
   template {
     container {
-      name    = "migrate"
-      image   = local.image
-      cpu     = 0.5
-      memory  = "1Gi"
-      command = ["bundle", "exec", "rails", "db:prepare"]
+      name   = "migrate"
+      image  = local.image
+      cpu    = 0.5
+      memory = "1Gi"
+      # db:migrate, not db:prepare. db:prepare loads db/schema.rb, whose
+      # generated `enable_extension "pg_catalog.plpgsql"` line fails on
+      # Azure Flexible Server: plpgsql is already installed but is not
+      # allow-listed for non-superusers, so the statement errors out even
+      # though it is a no-op. The migrations are the source of truth here
+      # and the database itself is created by Terraform.
+      command = ["bundle", "exec", "rails", "db:migrate"]
 
       dynamic "env" {
         for_each = local.env
@@ -253,11 +259,15 @@ resource "azurerm_container_app_job" "scan" {
 
   template {
     container {
-      name    = "scan"
-      image   = local.image
-      cpu     = 1.0
-      memory  = "2Gi"
-      command = ["rake", "secops:scan"]
+      name   = "scan"
+      image  = local.image
+      cpu    = 1.0
+      memory = "2Gi"
+      # `command` replaces the image ENTRYPOINT rather than appending to
+      # it, the same way it does in Kubernetes, so `bundle exec` has to be
+      # spelled out. Without it rake runs outside the bundle and dies on
+      # the activated-gem version conflict.
+      command = ["bundle", "exec", "rake", "secops:scan"]
 
       dynamic "env" {
         for_each = local.env
@@ -309,15 +319,30 @@ resource "azurerm_container_app_job" "consumer" {
       cpu    = 0.25
       memory = "0.5Gi"
 
+      # Talks to the identity endpoint and the Key Vault data plane
+      # directly rather than through `az login --identity`. The CLI's
+      # identity path probes IMDS at 169.254.169.254, which Container Apps
+      # does not serve (it answers 405); the platform injects the App
+      # Service style IDENTITY_ENDPOINT and IDENTITY_HEADER pair instead.
+      # This is the same token flow Azure::Token uses in the Rails app,
+      # which makes the stand-in workload an honest stand-in.
       command = ["/bin/bash", "-c"]
-      args = [
-        join(" && ", concat(
-          ["az login --identity --client-id $AZ_CLIENT_ID --output none"],
-          [for name in each.value.secrets :
-            "for i in 1 2 3; do az keyvault secret show --vault-name $KEY_VAULT_NAME --name ${name} --query id --output tsv; done"
-          ],
-          ["echo consumer ${each.key} finished"]
-        ))
+      args = [<<-SCRIPT
+        set -euo pipefail
+        token=$(curl -sS -H "X-IDENTITY-HEADER: $IDENTITY_HEADER" \
+          "$IDENTITY_ENDPOINT?api-version=2019-08-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$AZ_CLIENT_ID" \
+          | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+        for name in $SECRET_NAMES; do
+          for i in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w '%%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              "https://$KEY_VAULT_NAME.vault.azure.net/secrets/$name?api-version=7.4")
+            echo "read $name -> $code"
+            if [ "$code" != "200" ]; then echo "unexpected status for $name"; exit 1; fi
+          done
+        done
+        echo "consumer ${each.key} finished"
+      SCRIPT
       ]
 
       env {
@@ -328,6 +353,11 @@ resource "azurerm_container_app_job" "consumer" {
       env {
         name  = "KEY_VAULT_NAME"
         value = var.key_vault_name
+      }
+
+      env {
+        name  = "SECRET_NAMES"
+        value = join(" ", each.value.secrets)
       }
     }
   }

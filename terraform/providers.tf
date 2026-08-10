@@ -24,6 +24,12 @@ terraform {
 provider "azurerm" {
   subscription_id = var.subscription_id
 
+  # The evidence account has shared key access disabled, and without this
+  # the provider still reaches for a key to poll the blob data plane and
+  # fails the create with KeyBasedAuthenticationNotPermitted. Entra auth
+  # for the data plane is what the application uses too.
+  storage_use_azuread = true
+
   features {
     key_vault {
       # Purge protection is on for the demo vault, so a destroy leaves

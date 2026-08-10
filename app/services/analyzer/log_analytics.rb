@@ -19,22 +19,35 @@ module Analyzer
   class LogAnalytics
     API_BASE = "https://api.loganalytics.io/v1"
 
-    # Resource specific Key Vault audit table. Preferred: typed columns,
-    # cheaper to query, and the only one new vaults get by default.
+    # Resource specific Key Vault audit table, which is what a vault with
+    # log_analytics_destination_type = "Dedicated" writes to.
+    #
+    # Three things about this schema are easy to get wrong and were all
+    # found against a real workspace rather than from the docs:
+    #
+    #   - The object uri is in RequestUri. There is no id_s column here;
+    #     that one belongs to the legacy AzureDiagnostics shape below.
+    #   - RequestUri carries the data plane port, as
+    #     https://vault.vault.azure.net:8443/secrets/name. The inventory
+    #     records no port, so it has to be stripped or nothing matches.
+    #   - Caller claims are a JSON blob in Identity, not flattened into
+    #     identity_claim_oid_g / identity_claim_appid_g columns.
     KEY_VAULT_QUERY = <<~KQL
       AZKVAuditLogs
       | where TimeGenerated > ago(%<lookback>dd)
       | where OperationName in ("SecretGet", "CertificateGet", "KeyGet")
       | where ResultSignature == "OK"
-      | extend parsed = parse_url(tostring(id_s))
+      | extend parsed = parse_url(tostring(RequestUri))
       | extend segments = split(tostring(parsed["Path"]), "/")
-      | extend resource_id = strcat("https://", tostring(parsed["Host"]), "/",
-                                    tostring(segments[1]), "/", tostring(segments[2]))
+      | extend host = tostring(split(tostring(parsed["Host"]), ":")[0])
       | where isnotempty(tostring(segments[2]))
+      | extend resource_id = strcat("https://", host, "/",
+                                    tostring(segments[1]), "/", tostring(segments[2]))
+      | extend claim = parse_json(tostring(Identity))["claim"]
       | summarize access_count = count(), last_accessed = max(TimeGenerated)
           by resource_id,
-             principal_id = tostring(identity_claim_oid_g),
-             principal_appid = tostring(identity_claim_appid_g),
+             principal_id = tostring(claim["oid"]),
+             principal_appid = tostring(claim["appid"]),
              operation = OperationName
     KQL
 
@@ -57,21 +70,38 @@ module Analyzer
              operation = OperationName
     KQL
 
-    # App Configuration audit events. The Audit category records the read
-    # and the target key but does not always carry a caller object id, so
-    # principal_id can come back empty. That is a real gap, not a bug: an
-    # unidentifiable consumer is exactly what lowers the readiness score
-    # and raises SECRET_UNIDENTIFIED_CONSUMERS, so it is reported as found
-    # rather than silently dropped.
+    # App Configuration audit events.
+    #
+    # Restricted to reads. AACAudit records writes too (set-keyvalue), and
+    # counting the operator who created a key as one of its consumers
+    # would be worse than reporting no consumers at all: it would turn an
+    # orphaned key into one that looks actively used.
+    #
+    # The target uri percent encodes the separators in a hierarchical key,
+    # so secops-test/app/db-conn arrives as secops-test%2Fapp%2Fdb-conn.
+    # Decoding it here is what lets the inventory side match on key name.
+    #
+    # Caller identity is an array of typed entries rather than a claims
+    # object, and only the ObjectId entry is the principal. When it is
+    # absent the consumer stays unidentified, which is a real finding
+    # rather than a gap to paper over.
     APP_CONFIG_QUERY = <<~KQL
       AACAudit
       | where TimeGenerated > ago(%<lookback>dd)
-      | where OperationName has "KeyValue"
-      | extend resource_id = tostring(column_ifexists("Uri", ""))
-      | where isnotempty(resource_id)
+      | where OperationName has "get" and OperationName has "keyvalue"
+      | where ResultType == "Success"
+      | extend target = parse_json(tostring(TargetResource))
+      | extend parsed = parse_url(url_decode(tostring(target["TargetResourceName"])))
+      | extend host = tostring(split(tostring(parsed["Host"]), ":")[0])
+      | where isnotempty(host)
+      | extend resource_id = strcat("https://", host, tostring(parsed["Path"]))
+      | mv-apply entry = parse_json(tostring(CallerIdentity)) on (
+          where tostring(entry["callerIdentityType"]) == "ObjectId"
+          | project caller_oid = tostring(entry["callerIdentity"])
+        )
       | summarize access_count = count(), last_accessed = max(TimeGenerated)
           by resource_id,
-             principal_id = tostring(column_ifexists("Identity", "")),
+             principal_id = caller_oid,
              principal_appid = "",
              operation = OperationName
     KQL

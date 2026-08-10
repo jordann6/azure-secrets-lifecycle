@@ -20,8 +20,11 @@ module Analyzer
   # subscription with no Azure OpenAI quota still produces a complete,
   # auditable result; it just produces a duller one.
   class Runbook
-    API_VERSION = "2024-10-21"
-    MAX_TOKENS = 1500
+    # The GPT-5 series rejects the classic `max_tokens` and non-default
+    # `temperature`, and needs an API version new enough to know about
+    # `max_completion_tokens`.
+    API_VERSION = "2025-04-01-preview"
+    MAX_TOKENS = 4000
     ATTEMPTS = 2
 
     REQUIRED_KEYS = %w[resource_name steps rollback confidence confidence_rationale].freeze
@@ -235,8 +238,9 @@ module Analyzer
             { "role" => "system", "content" => SYSTEM_PROMPT },
             { "role" => "user", "content" => JSON.generate(context) }
           ],
-          "max_tokens" => MAX_TOKENS,
-          "temperature" => 0.2,
+          # Newer deployments count reasoning tokens against this budget,
+          # so it is set well above what the runbook JSON itself needs.
+          "max_completion_tokens" => MAX_TOKENS,
           "response_format" => { "type" => "json_object" }
         }
       )

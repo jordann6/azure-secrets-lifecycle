@@ -24,10 +24,29 @@ resource "azurerm_key_vault" "main" {
 
   public_network_access_enabled = true
 
+  # An IP allow list cannot gate this platform's own traffic. Container
+  # Apps consumption workloads egress from a shared regional pool: the
+  # environment's staticIp (inbound) is not the address Key Vault sees,
+  # and the outbound address is neither exposed by the API nor stable, so
+  # there is nothing to pin. Confirmed the hard way here, from the vault's
+  # own audit log: "Client address is not authorized and caller is not a
+  # trusted service. Client address: 20.1.246.185" against a staticIp of
+  # 20.10.216.195. AzureServices bypass does not cover Container Apps
+  # either.
+  #
+  # Closing this properly needs VNet integration plus a NAT gateway for a
+  # deterministic egress IP, or a private endpoint, both of which cost
+  # more per month than everything else in this deployment combined.
+  # The control that actually holds is Entra RBAC: the platform identity
+  # has Key Vault Reader and cannot read a value from any address.
+  #
+  # The honest consequence is that the platform reports its own vault as
+  # failing CIS Microsoft Azure Foundations 8.7 on every scan, which is
+  # the correct behaviour and worth leaving visible.
   network_acls {
     bypass         = "AzureServices"
-    default_action = var.operator_ip == "" ? "Allow" : "Deny"
-    ip_rules       = var.operator_ip == "" ? [] : [var.operator_ip]
+    default_action = "Allow"
+    ip_rules       = []
   }
 
   tags = var.tags
