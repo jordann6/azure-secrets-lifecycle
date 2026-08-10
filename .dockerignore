@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+docs
+terraform
+spec
+log
+tmp
+public/assets
+.rspec_status
+coverage
+docker-compose.yml
+Makefile
+README.md
+diagram.py

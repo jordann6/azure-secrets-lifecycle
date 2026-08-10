@@ -1,0 +1,42 @@
+/.bundle
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/public/assets
+/storage/*
+.env
+.env.*
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+backend.hcl
+
+# Local tooling
+.DS_Store
+.rspec_status
+/coverage
+
+# --- platform-guardrails ---
+!example.tfvars
+tfplan
+plan.json
+.terraform/
+.envrc
+kubeconfig
+*.kubeconfig
+*.pem
+*.ppk
+.checkov.json
+infracost.json

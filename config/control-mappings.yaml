@@ -1,0 +1,83 @@
+# Versioned control mapping. The evidence layer reads this file; the
+# finding logic never hardcodes a control id. Changing which framework a
+# finding maps to is a config change with a diff an auditor can read,
+# not a code change.
+version: 1
+
+frameworks:
+  hipaa:              "HIPAA 164.308(a)(5)(ii)(D)"
+  soc2:               "SOC 2 CC6.1"
+  nist_ia5:           "NIST 800-53 IA-5"
+  nist_ac2:           "NIST 800-53 AC-2"
+  mcsb_im3:           "Microsoft cloud security benchmark IM-3"
+  mcsb_im8:           "Microsoft cloud security benchmark IM-8"
+  cis_kv_expiry:      "CIS Microsoft Azure Foundations 8.3"
+  cis_kv_recoverable: "CIS Microsoft Azure Foundations 8.5"
+  cis_kv_private:     "CIS Microsoft Azure Foundations 8.7"
+
+findings:
+  SECRET_STALE:
+    title: "Secret exceeds maximum age with no rotation path"
+    severity: HIGH
+    controls: [hipaa, soc2, nist_ia5, mcsb_im8]
+
+  SECRET_NO_ROTATION_CONFIG:
+    title: "Secret has no verified rotation path"
+    severity: MEDIUM
+    controls: [hipaa, nist_ia5, mcsb_im8]
+
+  SECRET_NO_EXPIRY:
+    title: "Key Vault object has no expiration date set"
+    severity: MEDIUM
+    controls: [cis_kv_expiry, nist_ia5]
+
+  SECRET_EXPIRED:
+    title: "Key Vault object is past its expiration date"
+    severity: HIGH
+    controls: [cis_kv_expiry, soc2, nist_ia5]
+
+  SECRET_EXPIRING_SOON:
+    title: "Key Vault object expires inside the remediation window"
+    severity: MEDIUM
+    controls: [cis_kv_expiry, soc2]
+
+  SECRET_ORPHANED:
+    title: "No consumers observed in the lookback window"
+    severity: LOW
+    controls: [soc2, nist_ac2]
+
+  SECRET_UNIDENTIFIED_CONSUMERS:
+    title: "Consumers observed but the caller identity could not be resolved"
+    severity: MEDIUM
+    controls: [soc2, nist_ac2, mcsb_im3]
+
+  APP_CREDENTIAL_STALE:
+    title: "Entra app registration credential exceeds maximum age"
+    severity: HIGH
+    controls: [hipaa, soc2, nist_ia5, mcsb_im8]
+
+  APP_CREDENTIAL_LONG_LIVED:
+    title: "Entra app registration credential lifetime exceeds policy"
+    severity: MEDIUM
+    controls: [mcsb_im8, nist_ia5]
+
+  APP_CREDENTIAL_NO_FEDERATION:
+    title: "App registration uses a static secret where workload identity federation is available"
+    severity: LOW
+    controls: [mcsb_im3]
+
+  VAULT_PURGE_PROTECTION_DISABLED:
+    title: "Key Vault holding this object is not recoverable"
+    severity: MEDIUM
+    controls: [cis_kv_recoverable, soc2]
+
+  VAULT_PUBLIC_NETWORK_ACCESS:
+    title: "Key Vault holding this object accepts public network access"
+    severity: LOW
+    controls: [cis_kv_private, soc2]
+
+thresholds:
+  stale_age_days: 90
+  credential_stale_age_days: 90
+  expiring_soon_days: 30
+  max_credential_lifetime_days: 180

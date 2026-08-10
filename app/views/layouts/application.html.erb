@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title><%= content_for(:title) || "Secrets Lifecycle and Rotation Readiness" %></title>
+    <%= stylesheet_link_tag "application" %>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <div>
+          <h1>Secrets Lifecycle and Rotation Readiness</h1>
+          <p class="sub">Azure Key Vault, App Configuration, and Entra ID app registrations</p>
+        </div>
+        <nav>
+          <%= link_to "Latest", root_path, class: "navlink" %>
+          <%= link_to "Scan history", scans_path, class: "navlink" %>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <%= yield %>
+    </main>
+
+    <footer class="wrap foot">
+      <p>
+        Metadata only. This platform never requests a secret value, and the
+        managed identity it runs as does not hold a role that would let it.
+      </p>
+    </footer>
+  </body>
+</html>

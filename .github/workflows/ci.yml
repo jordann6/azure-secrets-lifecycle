@@ -1,0 +1,134 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rails:
+    name: Rails lint + SAST + tests (blocking)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      RAILS_ENV: test
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3.6"
+          bundler-cache: true
+
+      - name: rubocop
+        run: bundle exec rubocop --parallel
+
+      # SAST. Blocking: this application renders untrusted resource names
+      # and consumer display names straight out of Azure into HTML.
+      - name: brakeman
+        run: bundle exec brakeman --quiet --no-pager
+
+      - name: bundler-audit
+        run: |
+          bundle exec bundle-audit update
+          bundle exec bundle-audit check
+
+      - name: rspec
+        run: |
+          bundle exec rails db:prepare
+          bundle exec rspec
+
+  container:
+    name: Container image builds (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image is the deployment artifact for all four roles, so a
+      # broken build is a broken deploy even when the suite is green.
+      - name: docker build
+        run: docker build -t secops:ci .
+
+      - name: Trivy image scan (CRITICAL and HIGH)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: secops:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  terraform:
+    name: Terraform fmt + validate + scan (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.3"
+
+      - name: terraform fmt
+        run: terraform -chdir=terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: true
+          soft_fail: false
+          # Public network access on the vault, the store, and Postgres is
+          # deliberate and documented: the alternative is private endpoints
+          # plus VNet integration plus a NAT gateway, which costs more per
+          # month than everything else in this project combined. Postgres
+          # has password auth disabled outright, which is the compensating
+          # control.
+          skip_check: CKV_AZURE_109,CKV_AZURE_189,CKV_AZURE_112,CKV2_AZURE_32,CKV_AZURE_136
+
+  secrets:
+    name: Secret scan (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks detect --source . --redact --no-banner
+
+  shell:
+    name: Shellcheck operator scripts (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh

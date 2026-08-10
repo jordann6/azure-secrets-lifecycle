@@ -1,0 +1,62 @@
+# Local development and CI. The host does not need Ruby installed: the
+# same image that ships to Container Apps runs the test suite here.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: secops_development
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      target: build
+      args:
+        BUNDLE_WITHOUT: ""
+    environment:
+      RAILS_ENV: development
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      # Local runs authenticate as the operator's az CLI session rather
+      # than a managed identity that does not exist outside Azure.
+      SECOPS_USE_AZ_CLI: "true"
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:-}
+      LOG_ANALYTICS_WORKSPACE_ID: ${LOG_ANALYTICS_WORKSPACE_ID:-}
+    volumes:
+      - .:/app
+      # The build stage runs as root, so the CLI profile has to land in
+      # root's home for `az account get-access-token` to find it.
+      - ~/.azure:/root/.azure:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    command: ["bundle", "exec", "puma", "-C", "config/puma.rb"]
+
+  test:
+    build:
+      context: .
+      target: build
+      args:
+        BUNDLE_WITHOUT: ""
+    environment:
+      RAILS_ENV: test
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["bash", "-lc", "bundle exec rails db:prepare && bundle exec rspec"]

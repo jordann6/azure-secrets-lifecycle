@@ -1,0 +1,151 @@
+<% content_for :title, "Scan #{@scan.scan_id}" %>
+
+<div class="scanline">
+  <span>Scan <code><%= @scan.scan_id %></code></span>
+  <span><%= format_time(@scan.started_at) %></span>
+  <span><%= @scan.duration_seconds || "?" %>s wall clock</span>
+  <span><%= @scan.secrets_per_second || "?" %> resources/sec</span>
+  <span>status <strong><%= @scan.status %></strong></span>
+  <% if @scan.evidence_blob.present? %>
+    <span>evidence <code><%= @scan.evidence_blob %></code></span>
+  <% end %>
+  <span><%= link_to "raw evidence JSON", evidence_scan_path(@scan) %></span>
+</div>
+
+<% if @scan.partial? %>
+  <div class="warn">
+    <strong>Partial sweep.</strong>
+    <%= pluralize(@scan.sweep_errors.size, "source") %> failed and are absent from
+    this inventory. Findings below cover what was reachable, so treat coverage
+    percentages as a floor.
+    <ul>
+      <% @scan.sweep_errors.first(5).each do |err| %>
+        <li><code><%= err["sweep"] %></code>: <%= err["error"] %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<% if metric(@metrics, :simulated_age_count).to_i.positive? %>
+  <div class="warn">
+    <%= metric(@metrics, :simulated_age_count) %> of
+    <%= metric(@metrics, :total_resources) %> resources carry a simulated age tag.
+    Azure will not let a creation date be backdated, so seeded demo resources
+    declare their age instead. Those records are flagged everywhere they appear
+    and are never mistaken for real telemetry.
+  </div>
+<% end %>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :total_secrets) %></div>
+    <div class="k">secrets under management</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :total_credentials) %></div>
+    <div class="k">app credentials</div>
+  </div>
+  <div class="tile">
+    <div class="v">
+      <%= metric(@metrics, :mean_age_days) %>d<%=
+        relative_delta(metric(@metrics, :mean_age_days), @previous&.metrics&.dig("mean_age_days")) %>
+    </div>
+    <div class="k">mean age</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :median_age_days) %>d</div>
+    <div class="k">median age</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :pct_with_identified_consumers) %>%</div>
+    <div class="k">identified consumer set</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :pct_with_verified_rotation_path) %>%</div>
+    <div class="k">verified rotation path</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :pct_with_expiry_set) %>%</div>
+    <div class="k">expiry date set</div>
+  </div>
+  <div class="tile">
+    <div class="v"><%= metric(@metrics, :finding_count) %></div>
+    <div class="k">open findings</div>
+  </div>
+</div>
+
+<div class="grid2">
+  <section class="panel">
+    <h2>Age distribution</h2>
+    <%= bar_rows(age_buckets(@analyses)) %>
+  </section>
+
+  <section class="panel">
+    <h2>Rotation readiness</h2>
+    <%= bar_rows(metric(@metrics, :risk_tiers, {}), palette: tier_palette) %>
+    <p class="muted" style="font-size:12.5px;margin-bottom:0">
+      Readiness is not risk. High means rotating today is likely to break
+      something, usually because the consumer set is unknown.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>Findings by control</h2>
+    <%= bar_rows(metric(@metrics, :findings_by_control, {})) %>
+  </section>
+
+  <section class="panel">
+    <h2>Findings by severity</h2>
+    <%= bar_rows(metric(@metrics, :findings_by_severity, {}), palette: severity_palette) %>
+    <h2 style="margin-top:18px">Inventory by kind</h2>
+    <%= bar_rows(metric(@metrics, :by_kind, {})) %>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>
+    Highest risk resources
+    <% if metric(@metrics, :runbooks_by_generator, {}).any? %>
+      <span class="muted" style="text-transform:none;letter-spacing:0">
+        (runbooks:
+        <%= metric(@metrics, :runbooks_by_generator, {}).map { |gen, n| "#{n} #{gen}" }.join(", ") %>)
+      </span>
+    <% end %>
+  </h2>
+
+  <% if @top_risk.empty? %>
+    <p class="muted">No secrets in this scan.</p>
+  <% else %>
+    <%= render partial: "scans/risk_card", collection: @top_risk, as: :analysis %>
+  <% end %>
+</section>
+
+<section class="panel">
+  <h2>Open findings</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Finding</th>
+          <th>Resource</th>
+          <th>Owner</th>
+          <th class="num">Readiness</th>
+          <th>Controls</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @findings.each do |finding| %>
+          <tr>
+            <td><%= severity_pill(finding.severity) %></td>
+            <td><%= finding.title %></td>
+            <td><code><%= finding.secret_record.name %></code></td>
+            <td class="muted"><%= finding.owner_tag %></td>
+            <td class="num"><%= finding.readiness_score %></td>
+            <td class="muted"><%= finding.controls.join(", ") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

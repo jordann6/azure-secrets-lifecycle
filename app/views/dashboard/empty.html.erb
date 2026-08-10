@@ -1,0 +1,13 @@
+<section class="panel empty">
+  <h2>No completed scans yet</h2>
+  <p class="muted">
+    The scheduled Container Apps Job runs the sweep daily. To run one now:
+  </p>
+  <p><code>make scan</code></p>
+  <p class="muted">
+    Key Vault audit events reach Log Analytics with a few minutes of latency,
+    so run <code>make traffic</code>, wait, then scan for a populated consumer
+    map.
+  </p>
+  <p><%= link_to "Scan history", scans_path %></p>
+</section>

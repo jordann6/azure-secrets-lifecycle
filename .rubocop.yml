@@ -1,0 +1,32 @@
+inherit_gem:
+  rubocop-rails-omakase: rubocop.yml
+
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  Exclude:
+    - "db/schema.rb"
+    - "tmp/**/*"
+    - "vendor/**/*"
+
+# The service objects carry a lot of explanatory comment, and the KQL and
+# prompt heredocs are wide by nature. Neither is worth reflowing.
+Layout/LineLength:
+  Max: 110
+  AllowedPatterns:
+    - "^\\s*#"
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/ClassLength:
+  Enabled: false
+
+# Omakase enforces the Rails core `[ 1, 2 ]` spacing. This codebase uses
+# the compact form throughout, and the constant tables in the scanner and
+# the control mapper read better packed.
+Layout/SpaceInsideArrayLiteralBrackets:
+  EnforcedStyle: no_space

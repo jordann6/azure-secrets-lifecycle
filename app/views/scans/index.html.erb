@@ -1,0 +1,47 @@
+<% content_for :title, "Scan history" %>
+
+<section class="panel">
+  <h2>Scan history</h2>
+
+  <% if @scans.empty? %>
+    <p class="muted">No scans yet. Run <code>make scan</code>.</p>
+  <% else %>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Scan</th>
+            <th>Started</th>
+            <th>Status</th>
+            <th class="num">Resources</th>
+            <th class="num">Findings</th>
+            <th class="num">Mean age</th>
+            <th class="num">Identified consumers</th>
+            <th class="num">Verified rotation</th>
+            <th class="num">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @scans.each do |scan| %>
+            <tr>
+              <td><%= link_to scan.scan_id, scan_path(scan) %></td>
+              <td class="muted"><%= format_time(scan.started_at) %></td>
+              <td>
+                <%= scan.status %>
+                <% if scan.partial? %>
+                  <span class="muted">(partial)</span>
+                <% end %>
+              </td>
+              <td class="num"><%= scan.resource_count %></td>
+              <td class="num"><%= scan.metrics["finding_count"] || "-" %></td>
+              <td class="num"><%= scan.metrics["mean_age_days"] || "-" %></td>
+              <td class="num"><%= scan.metrics["pct_with_identified_consumers"] || "-" %></td>
+              <td class="num"><%= scan.metrics["pct_with_verified_rotation_path"] || "-" %></td>
+              <td class="num"><%= scan.duration_seconds || "-" %>s</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

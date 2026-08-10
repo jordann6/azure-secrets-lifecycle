@@ -1,0 +1,23 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+  host: <%= ENV.fetch("PGHOST", "localhost") %>
+  port: <%= ENV.fetch("PGPORT", 5432) %>
+  username: <%= ENV.fetch("PGUSER", "postgres") %>
+  password: <%= ENV.fetch("PGPASSWORD", "postgres") %>
+  # Azure Database for PostgreSQL Flexible Server requires TLS. Local
+  # docker-compose does not offer it, so the mode is environment driven.
+  sslmode: <%= ENV.fetch("PGSSLMODE", "prefer") %>
+
+development:
+  <<: *default
+  database: secops_development
+
+test:
+  <<: *default
+  database: secops_test
+
+production:
+  <<: *default
+  database: <%= ENV.fetch("PGDATABASE", "secops") %>
