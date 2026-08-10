@@ -31,6 +31,27 @@ namespace :secops do
     puts "re-analyzed #{scan.scan_id}"
   end
 
+  desc "Prove the least-privilege posture against the live cloud"
+  task verify_posture: :environment do
+    checks = Posture::Verify.new.call
+    width = checks.map { |c| c.name.length }.max
+
+    puts
+    puts format("%-#{width}s  %-6s  %-18s  %s", "CHECK", "RESULT", "EXPECTATION", "DETAIL")
+    checks.each do |c|
+      puts format("%-#{width}s  %-6s  %-18s  %s", c.name, c.status, c.expectation, c.detail)
+    end
+
+    failed = checks.reject(&:passed)
+    puts
+    puts "#{checks.size - failed.size}/#{checks.size} checks passed"
+
+    # Non-zero exit so this can gate a pipeline. A platform that claims it
+    # cannot read secret values should fail its own build the moment that
+    # stops being true.
+    abort "posture verification failed: #{failed.map(&:name).join(', ')}" if failed.any?
+  end
+
   desc "Print the latest scan metrics as JSON"
   task metrics: :environment do
     scan = Scan.latest_complete

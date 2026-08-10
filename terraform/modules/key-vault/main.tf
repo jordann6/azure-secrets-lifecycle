@@ -6,6 +6,16 @@
 # whole platform degrades to what Azure Policy already tells you.
 
 resource "azurerm_key_vault" "main" {
+  # All three findings are the same decision, and it is the one documented
+  # at length below the network_acls block: Container Apps consumption
+  # egress has no stable address, so a firewall or a private endpoint
+  # cannot gate this platform's own traffic without VNet integration plus
+  # a NAT gateway. Entra RBAC is the control that holds. The platform
+  # reports its own vault as failing CIS Azure 8.7 on every scan, which is
+  # left visible rather than suppressed in the finding logic.
+  #checkov:skip=CKV_AZURE_109:Firewall cannot gate serverless egress with no stable IP; see the network_acls comment.
+  #checkov:skip=CKV_AZURE_189:Public network access is required for the same reason; RBAC is the enforced control.
+  #checkov:skip=CKV2_AZURE_32:Private endpoint needs VNet plus NAT, which exceeds the whole project budget.
   name                = "${var.prefix}-kv-${var.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location

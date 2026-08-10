@@ -16,6 +16,15 @@
 #     not a default.
 
 resource "azurerm_storage_account" "evidence" {
+  # LRS, public endpoint, and platform managed keys are all cost and
+  # complexity decisions for a demo estate, not oversights. The controls
+  # that carry the compliance claim here are immutability, versioning,
+  # Entra only auth with no shared key, and the read logging below.
+  #checkov:skip=CKV_AZURE_206:LRS is deliberate; GRS doubles storage cost for evidence that is reproducible by re-running a scan.
+  #checkov:skip=CKV_AZURE_59:Public network access is required because Container Apps consumption egress has no stable IP to allow-list. Anonymous access is off and shared keys are disabled.
+  #checkov:skip=CKV2_AZURE_33:Private endpoint needs VNet integration plus a NAT gateway, which costs more than the rest of the deployment.
+  #checkov:skip=CKV2_AZURE_1:CMK needs a second vault and a key rotation story; evidence integrity here comes from the immutability policy, not from key custody.
+  #checkov:skip=CKV_AZURE_33:Queue logging is not applicable; this account serves blob only and has no queue service in use.
   name                = "${var.prefix}ev${var.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -47,9 +56,42 @@ resource "azurerm_storage_account" "evidence" {
 }
 
 resource "azurerm_storage_container" "evidence" {
+  # This control is implemented, not waived: StorageRead, StorageWrite and
+  # StorageDelete all flow to the workspace via the diagnostic setting
+  # below. Checkov's graph check looks for the legacy `log` block on a
+  # setting attached to the account and does not follow `enabled_log` on
+  # one scoped to /blobServices/default, so it reports a false negative.
+  #checkov:skip=CKV2_AZURE_21:Implemented by azurerm_monitor_diagnostic_setting.blob in this file; the graph check does not follow enabled_log on a blobServices-scoped setting.
   name                  = "evidence"
   storage_account_id    = azurerm_storage_account.evidence.id
   container_access_type = "private"
+}
+
+# Who read the evidence, and when. An immutable artifact proves the
+# findings were not altered after the fact; it says nothing about who
+# looked at them. For a container whose whole purpose is to satisfy an
+# auditor, the access trail is part of the product rather than an extra.
+resource "azurerm_monitor_diagnostic_setting" "blob" {
+  name               = "${var.prefix}-evidence-access"
+  target_resource_id = "${azurerm_storage_account.evidence.id}/blobServices/default"
+
+  log_analytics_workspace_id = var.workspace_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+
+  # Transaction metrics are deliberately not collected: this setting
+  # exists for the access trail, and metric ingestion is the line item
+  # that would actually cost something here.
 }
 
 resource "azurerm_storage_container_immutability_policy" "evidence" {

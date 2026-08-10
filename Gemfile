@@ -1,10 +1,10 @@
 source "https://rubygems.org"
 
-ruby "3.3.6"
+ruby "3.4.10"
 
 gem "rails", "~> 8.0.1"
 gem "pg", "~> 1.5"
-gem "puma", "~> 6.5"
+gem "puma", "~> 8.0", ">= 8.0.2"
 gem "propshaft", "~> 1.1"
 gem "faraday", "~> 2.12"
 gem "faraday-retry", "~> 2.2"

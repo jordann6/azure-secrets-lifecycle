@@ -89,6 +89,7 @@ module "evidence" {
   retention_days        = var.evidence_retention_days
   platform_principal_id = module.identity.principal_id
   operator_object_id    = data.azurerm_client_config.current.object_id
+  workspace_id          = module.observability.workspace_resource_id
   tags                  = local.tags
 }
 

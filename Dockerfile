@@ -3,7 +3,7 @@
 # rake command override. Building once keeps the analyzer the web process
 # renders from and the analyzer the schedule runs byte identical.
 
-FROM ruby:3.3.6-slim AS base
+FROM ruby:3.4.10-slim AS base
 
 ENV RAILS_ENV=production \
     BUNDLE_DEPLOYMENT=1 \
@@ -13,7 +13,12 @@ ENV RAILS_ENV=production \
 
 WORKDIR /app
 
+# apt-get upgrade on top of the pinned base. A base image is a point in
+# time snapshot, and even a current one accumulates OS CVEs between
+# releases; without this the Trivy gate fails on the base layer rather
+# than on anything this project wrote.
 RUN apt-get update -qq \
+    && apt-get upgrade -y -qq \
     && apt-get install --no-install-recommends -y libpq5 curl \
     && rm -rf /var/lib/apt/lists/*
 

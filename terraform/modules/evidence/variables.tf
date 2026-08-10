@@ -30,3 +30,8 @@ variable "operator_object_id" {
 variable "tags" {
   type = map(string)
 }
+
+variable "workspace_id" {
+  description = "Log Analytics workspace for evidence container access logging."
+  type        = string
+}

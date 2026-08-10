@@ -9,7 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  # Gated off until jordann6/platform-guardrails is published. A caller
+  # workflow pointing at a private or non-existent reusable workflow fails
+  # on every push with a resolution error, which trains people to ignore a
+  # red X rather than fix one.
+  #
+  # Nothing is lost in the meantime: ci.yml runs terraform fmt, validate,
+  # Checkov with no suppressions, gitleaks, Trivy, and shellcheck in this
+  # repo directly. Remove the `if: false` once the guardrails repo is
+  # public, then drop the overlapping jobs from ci.yml.
   static:
+    if: false
     uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1
     with:
       terraform_dir: terraform

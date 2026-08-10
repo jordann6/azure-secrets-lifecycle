@@ -13,6 +13,15 @@
 # one of those so the difference is visible on the dashboard.
 
 resource "azurerm_app_configuration" "main" {
+  # Every one of these is downstream of the free SKU, which is a
+  # deliberate cost choice: standard runs about $36 a month for a demo
+  # store holding five keys, more than the rest of the deployment
+  # combined. Free supports neither soft delete, purge protection, nor a
+  # customer managed key. Local auth is disabled, so access is Entra only.
+  #checkov:skip=CKV_AZURE_188:Free SKU is a cost decision; standard is ~$36/month for five demo keys.
+  #checkov:skip=CKV_AZURE_187:Purge protection is unavailable on the free SKU.
+  #checkov:skip=CKV_AZURE_186:CMK encryption requires the standard SKU and a second Key Vault.
+  #checkov:skip=CKV_AZURE_185:Public access is required because Container Apps consumption egress has no stable IP; local auth is disabled so Entra is the only path.
   name                = "${var.prefix}-appcs-${var.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location

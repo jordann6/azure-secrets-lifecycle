@@ -99,8 +99,12 @@ resource "azurerm_policy_definition" "no_secret_read" {
     }
   })
 
+  # "if" and "then" are quoted deliberately. Terraform accepts them bare,
+  # but the hcl2 parser Checkov uses treats a bare `if` as the keyword and
+  # fails the whole file, which silently drops this module from the scan
+  # rather than reporting anything. Quoting keeps it parseable.
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Authorization/roleAssignments" },
         {
@@ -124,6 +128,6 @@ resource "azurerm_policy_definition" "no_secret_read" {
         }
       ]
     }
-    then = { effect = "audit" }
+    "then" = { effect = "audit" }
   })
 }

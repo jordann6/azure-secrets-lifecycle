@@ -1,0 +1,21 @@
+# Gitleaks configuration.
+#
+# The default rule set is kept in full and extended, never replaced. The
+# single allowlist below is scoped to one expression shape rather than to
+# a path, so it cannot quietly exempt a real secret that lands in the same
+# file later.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Relative timestamp helpers in the test factory. The generic-api-key rule
+fires on "last_accessed" => 2.days.ago.utc.iso8601 because the field name
+contains "access" and the expression clears the entropy threshold. It is a
+timestamp, and the factory it lives in builds consumer-map fixtures that
+contain no credential material at all.
+"""
+regexes = [
+  '''\d+\.(days|hours|minutes)\.(ago|from_now)''',
+]

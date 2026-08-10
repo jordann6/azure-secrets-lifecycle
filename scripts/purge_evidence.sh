@@ -34,6 +34,18 @@ else
 	log "  no policy found, nothing to remove"
 fi
 
+# Deleting the policy here and leaving it in state makes terraform destroy
+# fail: it tries the same delete with the etag it read earlier and gets a
+# 412 Precondition Failed. Dropping it from state is the honest fix, since
+# the resource really is gone at this point. Guarded so this stays usable
+# outside a destroy, where there may be no state entry to remove.
+if terraform -chdir="${TF_DIR:-terraform}" state list 2>/dev/null |
+	grep -q 'azurerm_storage_container_immutability_policy'; then
+	log "  dropping the deleted policy from terraform state"
+	terraform -chdir="${TF_DIR:-terraform}" state rm \
+		module.evidence.azurerm_storage_container_immutability_policy.evidence >/dev/null
+fi
+
 log "deleting evidence blobs and their versions"
 az storage blob delete-batch \
 	--account-name "$EVIDENCE_STORAGE_ACCOUNT" \

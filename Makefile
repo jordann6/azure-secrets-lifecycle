@@ -7,13 +7,14 @@ REGISTRY = $(shell $(TF) output -raw registry_login_server 2>/dev/null)
 IMAGE_TAG ?= latest
 
 .PHONY: help test lint build push deploy migrate seed traffic scan dashboard \
-        evidence logs env destroy clean
+        evidence logs env verify destroy clean
 
 help:
 	@echo "test        run the suite in docker (no host ruby needed)"
 	@echo "lint        rubocop, brakeman, bundler-audit, terraform fmt"
 	@echo "deploy      registry first, then image, then everything else"
-	@echo "migrate     run db:prepare as the migrate job"
+	@echo "migrate     run db:migrate as the migrate job"
+	@echo "verify      prove the least-privilege posture in the live cloud"
 	@echo "seed        create the demo secret estate"
 	@echo "traffic     trigger the consumer jobs so the audit log fills"
 	@echo "scan        start the scan job now instead of waiting for cron"
@@ -55,6 +56,15 @@ migrate:
 	az containerapp job start --name $$($(TF) output -raw migrate_job_name) \
 		--resource-group $(RG) --output none
 	@echo "migrate job started"
+
+# Proves the least-privilege claims against the live cloud: that the
+# platform can read metadata, that it cannot read a secret value, and that
+# the evidence container really is immutable. Exits non-zero on any
+# regression, so it can gate a pipeline.
+verify:
+	az containerapp job start --name $$($(TF) output -raw verify_job_name) \
+		--resource-group $(RG) --output none
+	@echo "posture verification started; results land in the job logs"
 
 # Operator tasks read the deployment's coordinates from terraform outputs.
 env:

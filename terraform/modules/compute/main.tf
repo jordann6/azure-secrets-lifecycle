@@ -10,6 +10,22 @@
 # scheduled scan costs cents.
 
 resource "azurerm_container_registry" "main" {
+  # Vulnerability scanning, content trust, quarantine, geo-replication,
+  # zone redundancy, untagged-manifest retention, and dedicated data
+  # endpoints are all Premium SKU features. Premium is roughly $50 a month
+  # against $5 for Basic, on a registry that holds one image for a project
+  # designed to be destroyed the same day. Image scanning is not skipped
+  # as a practice, it is moved: CI runs Trivy against the built image on
+  # every push, which catches the same class of finding before the image
+  # ever reaches this registry.
+  #checkov:skip=CKV_AZURE_163:Premium-only; Trivy scans the image in CI on every push instead.
+  #checkov:skip=CKV_AZURE_166:Quarantine is Premium-only; CI gates the image before it is pushed.
+  #checkov:skip=CKV_AZURE_164:Content trust is Premium-only and signing infrastructure is out of scope for a demo.
+  #checkov:skip=CKV_AZURE_165:Geo-replication is Premium-only and this is a single-region deployment.
+  #checkov:skip=CKV_AZURE_233:Zone redundancy is Premium-only.
+  #checkov:skip=CKV_AZURE_167:Untagged-manifest retention is Premium-only; the registry is destroyed with the deployment.
+  #checkov:skip=CKV_AZURE_237:Dedicated data endpoints are Premium-only.
+  #checkov:skip=CKV_AZURE_139:Public access is required for Container Apps to pull; the admin account is disabled and pulls authenticate with a managed identity.
   name                = "${var.prefix}acr${var.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -205,6 +221,64 @@ resource "azurerm_container_app_job" "migrate" {
       # though it is a no-op. The migrations are the source of truth here
       # and the database itself is created by Terraform.
       command = ["bundle", "exec", "rails", "db:migrate"]
+
+      dynamic "env" {
+        for_each = local.env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      env {
+        name        = "SECRET_KEY_BASE"
+        secret_name = "secret-key-base"
+      }
+    }
+  }
+
+  depends_on = [azurerm_role_assignment.acr_pull]
+}
+
+# Proves the least-privilege posture from inside the platform identity.
+# Separate from the scan so it can be run on demand, and so a posture
+# regression fails on its own rather than being buried in a scan log.
+resource "azurerm_container_app_job" "verify" {
+  name                         = "${var.prefix}-verify"
+  resource_group_name          = var.resource_group_name
+  location                     = var.location
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  replica_timeout_in_seconds   = 600
+  replica_retry_limit          = 0
+  tags                         = var.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [var.identity_id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.main.login_server
+    identity = var.identity_id
+  }
+
+  secret {
+    name  = "secret-key-base"
+    value = random_password.secret_key_base.result
+  }
+
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  template {
+    container {
+      name    = "verify"
+      image   = local.image
+      cpu     = 0.5
+      memory  = "1Gi"
+      command = ["bundle", "exec", "rake", "secops:verify_posture"]
 
       dynamic "env" {
         for_each = local.env

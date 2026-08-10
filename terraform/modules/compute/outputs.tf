@@ -22,6 +22,10 @@ output "migrate_job_name" {
   value = azurerm_container_app_job.migrate.name
 }
 
+output "verify_job_name" {
+  value = azurerm_container_app_job.verify.name
+}
+
 output "consumer_job_names" {
   value = { for k, v in azurerm_container_app_job.consumer : k => v.name }
 }
