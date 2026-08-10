@@ -49,6 +49,21 @@ RSpec.describe SecretRecord do
       expect(described_class.attributes_from_sweep(swept)[:details]).not_to have_key("scan_id")
     end
 
+    it "defaults the NOT NULL jsonb columns a sweep may omit" do
+      # insert_all! builds one column list across every row and writes
+      # NULL where a row omits a key, so the column default never applies.
+      # A sweep that omitted access_model took down a whole scan with a
+      # constraint violation.
+      attrs = described_class.attributes_from_sweep(
+        resource_id: "https://s.azconfig.io/kv/a", name: "a", kind: "app_config_kv",
+        scanned_at: Time.now.utc
+      )
+
+      expect(attrs[:access_model]).to eq({})
+      expect(attrs[:tags]).to eq({})
+      expect(attrs[:details]).to eq({})
+    end
+
     it "round trips through the bulk insert the sweep actually uses" do
       # insert_all! bypasses ActiveRecord type casting, so this is the only
       # thing that proves a swept hash lands in Postgres jsonb intact.

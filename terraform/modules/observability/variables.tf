@@ -27,3 +27,8 @@ variable "enable_findings_table" {
 variable "tags" {
   type = map(string)
 }
+
+variable "platform_principal_id" {
+  description = "Platform identity, granted publisher rights on the findings DCR."
+  type        = string
+}

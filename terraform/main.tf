@@ -36,6 +36,7 @@ module "observability" {
   location              = var.location
   retention_days        = var.log_retention_days
   enable_findings_table = var.enable_sentinel_export
+  platform_principal_id = module.identity.principal_id
   tags                  = local.tags
 }
 

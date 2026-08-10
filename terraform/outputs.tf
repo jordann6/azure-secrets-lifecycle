@@ -60,6 +60,10 @@ output "migrate_job_name" {
   value = module.compute.migrate_job_name
 }
 
+output "verify_job_name" {
+  value = module.compute.verify_job_name
+}
+
 output "consumer_app_job_name" {
   value = module.compute.consumer_job_names["app"]
 }

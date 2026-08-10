@@ -149,3 +149,16 @@ resource "azurerm_monitor_data_collection_rule" "findings" {
 
   depends_on = [azapi_resource.findings_table]
 }
+
+# Without this the analyzer's Logs Ingestion POST returns 403. The
+# Logs Ingestion API authorizes against the data collection rule, not the
+# workspace, and Log Analytics Reader on the subscription does not carry
+# the ingestion action. Monitoring Metrics Publisher is the role that
+# does, despite the name reading like it is metrics only.
+resource "azurerm_role_assignment" "findings_publisher" {
+  count = var.enable_findings_table ? 1 : 0
+
+  scope                = azurerm_monitor_data_collection_rule.findings[0].id
+  role_definition_name = "Monitoring Metrics Publisher"
+  principal_id         = var.platform_principal_id
+}

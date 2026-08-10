@@ -32,10 +32,33 @@ module Scanner
     end
 
     def sweep(scan_id:, now: Time.now.utc)
-      stores = @endpoint.present? ? [{ endpoint: @endpoint, name: host_of(@endpoint) }] : list_stores
+      stores = @endpoint.present? ? [store_from_endpoint] : list_stores
       Rails.logger.info("app configuration sweep: #{stores.size} stores")
 
       @pool.map(stores) { |store| sweep_store(store, scan_id, now) }
+    end
+
+    # Addressing a store directly by endpoint skips the ARM lookup, so the
+    # control plane properties that lookup provides are genuinely unknown
+    # rather than absent. They are filled in explicitly: a store shape
+    # missing access_model produced a NOT NULL violation on insert, since
+    # insert_all! writes NULL for a key some rows omit instead of falling
+    # back to the column default.
+    def store_from_endpoint
+      {
+        arm_id: nil,
+        name: host_of(@endpoint),
+        location: nil,
+        resource_group: nil,
+        endpoint: @endpoint,
+        access_model: {
+          "rbac_authorization" => true,
+          "read_principals" => [],
+          "public_network_access" => "Unknown",
+          "local_auth_disabled" => nil,
+          "source" => "endpoint-only; control plane properties not read"
+        }
+      }
     end
 
     def list_stores

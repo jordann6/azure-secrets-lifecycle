@@ -23,12 +23,21 @@ class SecretRecord < ApplicationRecord
   scope :secrets_only, -> { where.not(kind: "entra_app_credential") }
   scope :credentials_only, -> { where(kind: "entra_app_credential") }
 
+  # jsonb columns that are NOT NULL in the schema. Bulk insert builds one
+  # column list across every row and writes NULL wherever a row omits a
+  # key, so a column default never applies. Any sweep that forgets one of
+  # these would fail the whole scan on a constraint violation, which is
+  # why they are defaulted here rather than in each sweep.
+  JSONB_DEFAULTS = { tags: {}, access_model: {}, details: {} }.freeze
+
   # Splits a normalized sweep hash into columns plus the details bag.
   def self.attributes_from_sweep(record)
     record = record.symbolize_keys
     columns = record.slice(*COLUMN_KEYS)
     columns[:details] = record.except(*COLUMN_KEYS, :scan_id)
                               .transform_keys(&:to_s)
+
+    JSONB_DEFAULTS.each { |key, default| columns[key] ||= default }
     columns
   end
 

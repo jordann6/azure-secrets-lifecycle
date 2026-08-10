@@ -32,7 +32,9 @@ module Evidence
     def write(scan, findings, metrics)
       return nil unless enabled?
 
-      path = "evidence/#{scan.scan_id}/evidence.json"
+      # No "evidence/" prefix: the container is already named evidence, so
+      # prefixing produced evidence/evidence/<scan>/evidence.json.
+      path = "#{scan.scan_id}/evidence.json"
       body = JSON.pretty_generate(artifact(scan, findings, metrics))
 
       @client.put(
