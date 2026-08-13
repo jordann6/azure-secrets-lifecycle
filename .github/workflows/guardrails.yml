@@ -1,28 +1,28 @@
 name: Guardrails
 
-# Manual trigger only until jordann6/platform-guardrails is published.
-# GitHub resolves a reusable workflow reference before it evaluates any
-# `if:` on the job, so an unresolvable `uses:` fails the whole run at
-# startup on every push no matter how the job is gated. Restricting the
-# trigger is the only way to keep the caller in the repo without a
-# permanent red X. Restore the push and pull_request triggers, and drop
-# the `if: false`, once that repo is public.
+# Manual trigger only. jordann6/platform-guardrails is public now, so the
+# original reason for gating this off is gone, but the jobs below are still
+# `if: false` pending a deliberate cutover. See the note on `static`.
 on:
   workflow_dispatch:
 
+# tf-plan.yml declares id-token: write and pull-requests: write. A reusable
+# workflow cannot request permissions the caller has not granted, and GitHub
+# resolves `uses:` before it evaluates the job's `if:`, so gating the plan job
+# off does not avoid the check. Without these two lines every dispatch fails at
+# startup with no logs and no jobs.
 permissions:
   contents: read
+  id-token: write
+  pull-requests: write
 
 jobs:
-  # Gated off until jordann6/platform-guardrails is published. A caller
-  # workflow pointing at a private or non-existent reusable workflow fails
-  # on every push with a resolution error, which trains people to ignore a
-  # red X rather than fix one.
-  #
-  # Nothing is lost in the meantime: ci.yml runs terraform fmt, validate,
-  # Checkov with no suppressions, gitleaks, Trivy, and shellcheck in this
-  # repo directly. Remove the `if: false` once the guardrails repo is
-  # public, then drop the overlapping jobs from ci.yml.
+  # Still gated, but no longer because the guardrails repo is private.
+  # ci.yml already runs terraform fmt, validate, Checkov with no suppressions,
+  # gitleaks, Trivy, and shellcheck in this repo directly, so nothing is
+  # unguarded in the meantime. Turning this on means dropping the overlapping
+  # jobs from ci.yml in the same change, which is a cutover to do on purpose
+  # rather than a flag to flip.
   static:
     if: false
     uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1
