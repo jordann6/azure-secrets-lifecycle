@@ -6,15 +6,11 @@ name: Guardrails
 on:
   workflow_dispatch:
 
-# tf-plan.yml declares id-token: write and pull-requests: write. A reusable
-# workflow cannot request permissions the caller has not granted, and GitHub
-# resolves `uses:` before it evaluates the job's `if:`, so gating the plan job
-# off does not avoid the check. Without these two lines every dispatch fails at
-# startup with no logs and no jobs.
+# Workflow-level default stays credential-free. The elevated permissions the
+# plan job needs live on that job alone, so restoring a pull_request trigger
+# later cannot hand an OIDC token to the static gates by accident.
 permissions:
   contents: read
-  id-token: write
-  pull-requests: write
 
 jobs:
   # Still gated, but no longer because the guardrails repo is private.
@@ -33,8 +29,16 @@ jobs:
 
   # Needs an OIDC role before it can run. Fill in aws_role_arn and remove the
   # `if: false` guard to turn on plan, destroy guard, and cost diff.
+  # These permissions are what tf-plan.yml declares. GitHub resolves `uses:`
+  # and checks them before it evaluates `if:`, so they are required even while
+  # the job is gated off. Omitting them fails the whole run at startup, with no
+  # logs and no jobs.
   plan:
     if: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
     uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1
     with:
       terraform_dir: terraform
