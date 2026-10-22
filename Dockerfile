@@ -3,7 +3,7 @@
 # rake command override. Building once keeps the analyzer the web process
 # renders from and the analyzer the schedule runs byte identical.
 
-FROM ruby:3.4.10-slim AS base
+FROM ruby:3.4.11-slim AS base
 
 ENV RAILS_ENV=production \
     BUNDLE_DEPLOYMENT=1 \
