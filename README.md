@@ -18,6 +18,13 @@ papered over.
 
 ![Architecture](docs/architecture.png)
 
+Green edges are the daily scan, and they read metadata only: Key Vault and App
+Configuration listings without values, and credential descriptors from Graph.
+The red edge is the one place values are read, by the stand-in workloads, and
+those reads are what the audit logs turn into a consumer map. The scan joins
+the two, sends only bounded high-risk cases to Azure OpenAI, and writes
+findings to Postgres for the dashboard and immutable evidence to Blob.
+
 ## What it does
 
 1. **Scanner** sweeps Key Vault secrets and certificates, App
